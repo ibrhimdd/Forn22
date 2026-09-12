@@ -1,0 +1,6 @@
+{
+  "name": "مخبز أبو ريان للعيش السوري",
+  "description": "منصة شاملة لإدارة مخبز أبو ريان للعيش السوري، تسجيل إنتاج اللقم، احتساب السلف اليومية الإجبارية، مراجعة واعتماد اليوميات، وتصفية الحسابات.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
