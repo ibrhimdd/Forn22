@@ -8,6 +8,11 @@ import {
   SettlementRecord,
   BakerySettings,
   AdvanceCategory,
+  FlourSupplier,
+  FlourDelivery,
+  FlourPayment,
+  FlourPaymentMethod,
+  SupplierFinancials,
 } from '../types';
 import {
   initialBakerySettings,
@@ -15,6 +20,9 @@ import {
   initialProductionLogs,
   initialAdvances,
   initialSettlements,
+  initialSuppliers,
+  initialFlourDeliveries,
+  initialFlourPayments,
 } from '../data/mockData';
 
 interface WorkerFinancials {
@@ -91,6 +99,44 @@ interface BakeryContextType {
   deleteAdvance: (id: string) => void;
   getWorkerFinancials: (workerId: string) => WorkerFinancials;
   executeFinalSettlement: (workerId: string, notes?: string) => SettlementRecord;
+  
+  // Flour & Suppliers Module (بند الدقيق وتنزيل الأطنان والمطاحن)
+  suppliers: FlourSupplier[];
+  flourDeliveries: FlourDelivery[];
+  flourPayments: FlourPayment[];
+  addSupplier: (supplier: Omit<FlourSupplier, 'id' | 'createdAt'>) => void;
+  updateSupplier: (id: string, updates: Partial<FlourSupplier>) => void;
+  deleteSupplier: (id: string) => void;
+  addFlourDelivery: (data: {
+    supplierId: string;
+    date: string;
+    tons: number;
+    bagsCount?: number;
+    pricePerTon: number;
+    driverName?: string;
+    truckNumber?: string;
+    invoiceNumber?: string;
+    notes?: string;
+  }) => void;
+  deleteFlourDelivery: (id: string) => void;
+  addFlourPayment: (data: {
+    supplierId: string;
+    date: string;
+    amount: number;
+    paymentMethod: FlourPaymentMethod;
+    receiptNumber?: string;
+    notes?: string;
+  }) => void;
+  deleteFlourPayment: (id: string) => void;
+  getSupplierFinancials: (supplierId: string) => SupplierFinancials;
+  getTotalFlourFinancials: () => {
+    totalTons: number;
+    totalBags: number;
+    totalCost: number;
+    totalPaid: number;
+    totalBalanceRemaining: number;
+  };
+
   resetToDefaults: () => void;
 }
 
@@ -180,6 +226,22 @@ export const BakeryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return saved ? JSON.parse(saved) : initialSettlements;
   });
 
+  // Flour & Suppliers State
+  const [suppliers, setSuppliers] = useState<FlourSupplier[]>(() => {
+    const saved = localStorage.getItem('syrian_bakery_suppliers');
+    return saved ? JSON.parse(saved) : initialSuppliers;
+  });
+
+  const [flourDeliveries, setFlourDeliveries] = useState<FlourDelivery[]>(() => {
+    const saved = localStorage.getItem('syrian_bakery_flour_deliveries');
+    return saved ? JSON.parse(saved) : initialFlourDeliveries;
+  });
+
+  const [flourPayments, setFlourPayments] = useState<FlourPayment[]>(() => {
+    const saved = localStorage.getItem('syrian_bakery_flour_payments');
+    return saved ? JSON.parse(saved) : initialFlourPayments;
+  });
+
   // Sync to local storage
   useEffect(() => {
     localStorage.setItem('syrian_bakery_role', currentRole);
@@ -216,6 +278,18 @@ export const BakeryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   useEffect(() => {
     localStorage.setItem('syrian_bakery_settlements', JSON.stringify(settlements));
   }, [settlements]);
+
+  useEffect(() => {
+    localStorage.setItem('syrian_bakery_suppliers', JSON.stringify(suppliers));
+  }, [suppliers]);
+
+  useEffect(() => {
+    localStorage.setItem('syrian_bakery_flour_deliveries', JSON.stringify(flourDeliveries));
+  }, [flourDeliveries]);
+
+  useEffect(() => {
+    localStorage.setItem('syrian_bakery_flour_payments', JSON.stringify(flourPayments));
+  }, [flourPayments]);
 
   const loginAdmin = (_password?: string): boolean => {
     const adminUser = {
@@ -654,17 +728,173 @@ export const BakeryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return newSettlement;
   };
 
+  // ==================== FLOUR & SUPPLIERS METHODS ====================
+
+  const addSupplier = (supplierData: Omit<FlourSupplier, 'id' | 'createdAt'>) => {
+    const newSupplier: FlourSupplier = {
+      ...supplierData,
+      id: `sup-${Date.now()}`,
+      code: supplierData.code || `SUP-${suppliers.length + 101}`,
+      createdAt: new Date().toISOString(),
+    };
+    setSuppliers((prev) => [newSupplier, ...prev]);
+  };
+
+  const updateSupplier = (id: string, updates: Partial<FlourSupplier>) => {
+    setSuppliers((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, ...updates } : s))
+    );
+    // Also sync supplier name in deliveries and payments if name changed
+    if (updates.name) {
+      setFlourDeliveries((prev) =>
+        prev.map((d) => (d.supplierId === id ? { ...d, supplierName: updates.name! } : d))
+      );
+      setFlourPayments((prev) =>
+        prev.map((p) => (p.supplierId === id ? { ...p, supplierName: updates.name! } : p))
+      );
+    }
+  };
+
+  const deleteSupplier = (id: string) => {
+    setSuppliers((prev) => prev.filter((s) => s.id !== id));
+  };
+
+  const addFlourDelivery = (data: {
+    supplierId: string;
+    date: string;
+    tons: number;
+    bagsCount?: number;
+    pricePerTon: number;
+    driverName?: string;
+    truckNumber?: string;
+    invoiceNumber?: string;
+    notes?: string;
+  }) => {
+    const supplier = suppliers.find((s) => s.id === data.supplierId);
+    const tonsNum = Number(data.tons) || 0;
+    const rateNum = Number(data.pricePerTon) || 0;
+    const totalCost = tonsNum * rateNum;
+    const bagsCount =
+      data.bagsCount !== undefined && data.bagsCount !== null && !isNaN(Number(data.bagsCount))
+        ? Number(data.bagsCount)
+        : Math.round(tonsNum * 20); // 20 شكارة زنة 50 كجم في الطن
+
+    const newDelivery: FlourDelivery = {
+      id: `del-${Date.now()}`,
+      supplierId: data.supplierId,
+      supplierName: supplier ? supplier.name : 'مورد دقيق',
+      date: data.date,
+      tons: tonsNum,
+      bagsCount,
+      pricePerTon: rateNum,
+      totalCost,
+      driverName: data.driverName?.trim() || undefined,
+      truckNumber: data.truckNumber?.trim() || undefined,
+      invoiceNumber: data.invoiceNumber?.trim() || undefined,
+      notes: data.notes?.trim() || undefined,
+      createdAt: new Date().toISOString(),
+    };
+
+    setFlourDeliveries((prev) => [newDelivery, ...prev]);
+  };
+
+  const deleteFlourDelivery = (id: string) => {
+    setFlourDeliveries((prev) => prev.filter((d) => d.id !== id));
+  };
+
+  const addFlourPayment = (data: {
+    supplierId: string;
+    date: string;
+    amount: number;
+    paymentMethod: FlourPaymentMethod;
+    receiptNumber?: string;
+    notes?: string;
+  }) => {
+    const supplier = suppliers.find((s) => s.id === data.supplierId);
+    const newPayment: FlourPayment = {
+      id: `pay-${Date.now()}`,
+      supplierId: data.supplierId,
+      supplierName: supplier ? supplier.name : 'مورد دقيق',
+      date: data.date,
+      amount: Number(data.amount) || 0,
+      paymentMethod: data.paymentMethod,
+      receiptNumber: data.receiptNumber?.trim() || undefined,
+      notes: data.notes?.trim() || undefined,
+      createdAt: new Date().toISOString(),
+    };
+
+    setFlourPayments((prev) => [newPayment, ...prev]);
+  };
+
+  const deleteFlourPayment = (id: string) => {
+    setFlourPayments((prev) => prev.filter((p) => p.id !== id));
+  };
+
+  const getSupplierFinancials = (supplierId: string): SupplierFinancials => {
+    const supDeliveries = flourDeliveries.filter((d) => d.supplierId === supplierId);
+    const supPayments = flourPayments.filter((p) => p.supplierId === supplierId);
+
+    const totalTons = supDeliveries.reduce((sum, d) => sum + (Number(d.tons) || 0), 0);
+    const totalBags = supDeliveries.reduce(
+      (sum, d) => sum + (Number(d.bagsCount) || Math.round((Number(d.tons) || 0) * 20)),
+      0
+    );
+    const totalCost = supDeliveries.reduce((sum, d) => sum + (Number(d.totalCost) || 0), 0);
+    const totalPaid = supPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+    const balanceRemaining = totalCost - totalPaid;
+
+    const sortedDel = [...supDeliveries].sort((a, b) => b.date.localeCompare(a.date));
+    const sortedPay = [...supPayments].sort((a, b) => b.date.localeCompare(a.date));
+
+    return {
+      totalTons,
+      totalBags,
+      totalCost,
+      totalPaid,
+      balanceRemaining,
+      deliveriesCount: supDeliveries.length,
+      paymentsCount: supPayments.length,
+      lastDeliveryDate: sortedDel[0]?.date,
+      lastPaymentDate: sortedPay[0]?.date,
+    };
+  };
+
+  const getTotalFlourFinancials = () => {
+    const totalTons = flourDeliveries.reduce((sum, d) => sum + (Number(d.tons) || 0), 0);
+    const totalBags = flourDeliveries.reduce(
+      (sum, d) => sum + (Number(d.bagsCount) || Math.round((Number(d.tons) || 0) * 20)),
+      0
+    );
+    const totalCost = flourDeliveries.reduce((sum, d) => sum + (Number(d.totalCost) || 0), 0);
+    const totalPaid = flourPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+    const totalBalanceRemaining = totalCost - totalPaid;
+
+    return {
+      totalTons,
+      totalBags,
+      totalCost,
+      totalPaid,
+      totalBalanceRemaining,
+    };
+  };
+
   const resetToDefaults = () => {
     localStorage.removeItem('syrian_bakery_settings');
     localStorage.removeItem('syrian_bakery_workers');
     localStorage.removeItem('syrian_bakery_production');
     localStorage.removeItem('syrian_bakery_advances');
     localStorage.removeItem('syrian_bakery_settlements');
+    localStorage.removeItem('syrian_bakery_suppliers');
+    localStorage.removeItem('syrian_bakery_flour_deliveries');
+    localStorage.removeItem('syrian_bakery_flour_payments');
     setSettings(initialBakerySettings);
     setWorkers(initialWorkers);
     setProductionLogs(initialProductionLogs);
     setAdvances(initialAdvances);
     setSettlements(initialSettlements);
+    setSuppliers(initialSuppliers);
+    setFlourDeliveries(initialFlourDeliveries);
+    setFlourPayments(initialFlourPayments);
     setCurrentWorkerId('w-1');
   };
 
@@ -699,6 +929,18 @@ export const BakeryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         deleteAdvance,
         getWorkerFinancials,
         executeFinalSettlement,
+        suppliers,
+        flourDeliveries,
+        flourPayments,
+        addSupplier,
+        updateSupplier,
+        deleteSupplier,
+        addFlourDelivery,
+        deleteFlourDelivery,
+        addFlourPayment,
+        deleteFlourPayment,
+        getSupplierFinancials,
+        getTotalFlourFinancials,
         resetToDefaults,
       }}
     >

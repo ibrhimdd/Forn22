@@ -89,3 +89,59 @@ export interface BakerySettings {
   phone: string;
   address: string;
 }
+
+// ==================== FLOUR & SUPPLIERS MODULE (بند الدقيق والموردين) ====================
+
+export interface FlourSupplier {
+  id: string;
+  code: string; // e.g., "SUP-101"
+  name: string; // اسم المورد أو المطحن أو تاجر الدقيق
+  contactPerson?: string; // اسم المندوب أو المسؤول
+  phone: string; // رقم التليفون
+  address?: string; // مقر المطحن أو المحافظة
+  flourType?: string; // نوع الدقيق (فاخر 72%، شامي، استخراج 82%)
+  notes?: string;
+  createdAt: string;
+}
+
+export interface FlourDelivery {
+  id: string;
+  supplierId: string;
+  supplierName: string;
+  date: string; // YYYY-MM-DD
+  tons: number; // عدد الأطنان (e.g., 5 أو 10.5 طن)
+  bagsCount?: number; // عدد الشكاير التقديري (50 كجم = 20 شيكارة / طن)
+  pricePerTon: number; // سعر الطن بالعملة (e.g., 16000 ج.م)
+  totalCost: number; // tons * pricePerTon (يتم حسابه تلقائياً)
+  driverName?: string; // اسم السائق
+  truckNumber?: string; // رقم السيارة
+  invoiceNumber?: string; // رقم الفاتورة أو إذن الاستلام
+  notes?: string;
+  createdAt: string;
+}
+
+export type FlourPaymentMethod = 'cash' | 'transfer' | 'cheque' | 'vodafone_cash' | 'other';
+
+export interface FlourPayment {
+  id: string;
+  supplierId: string;
+  supplierName: string;
+  date: string; // YYYY-MM-DD
+  amount: number; // المبلغ المدفوع
+  paymentMethod: FlourPaymentMethod;
+  receiptNumber?: string; // رقم الإيصال / الشيك / التحويل
+  notes?: string;
+  createdAt: string;
+}
+
+export interface SupplierFinancials {
+  totalTons: number;
+  totalBags: number;
+  totalCost: number; // إجمالي قيمة الشحنات
+  totalPaid: number; // إجمالي الدفعات المسددة
+  balanceRemaining: number; // totalCost - totalPaid (الرصيد المتبقي له)
+  deliveriesCount: number;
+  paymentsCount: number;
+  lastDeliveryDate?: string;
+  lastPaymentDate?: string;
+}
