@@ -3,6 +3,7 @@ import {
   UserRole,
   WorkerProfile,
   ProductionLog,
+  ProductionStatus,
   AdvanceRecord,
   SettlementRecord,
   BakerySettings,
@@ -59,12 +60,14 @@ interface BakeryContextType {
     data: {
       workerId: string;
       date: string;
-      shift: 'morning' | 'evening';
+      shift?: 'morning' | 'evening';
       piecesCount: number;
       notes?: string;
       advanceAmount?: number;
       advanceCategory?: AdvanceCategory;
       advanceNotes?: string;
+      ratePer1000?: number;
+      status?: ProductionStatus;
     }
   ) => void;
   approveProductionLog: (
@@ -323,27 +326,34 @@ export const BakeryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const addProductionLog = (data: {
     workerId: string;
     date: string;
-    shift: 'morning' | 'evening';
+    shift?: 'morning' | 'evening';
     piecesCount: number;
     notes?: string;
     advanceAmount?: number;
     advanceCategory?: AdvanceCategory;
     advanceNotes?: string;
+    ratePer1000?: number;
+    status?: ProductionStatus;
   }) => {
     const worker = workers.find((w) => w.id === data.workerId);
     const workerName = worker ? worker.name : 'عامل';
-    // Rate: use worker's custom rate if set, otherwise bakery default rate per 1000
-    const ratePer1000 = worker?.customRatePer1000 ?? settings.defaultRatePer1000;
-    const grossAmount = (data.piecesCount / 1000) * ratePer1000;
+    // Rate: use passed rate, or worker's custom rate if set, otherwise bakery default rate per 1000
+    const ratePer1000 =
+      data.ratePer1000 !== undefined
+        ? Number(data.ratePer1000)
+        : (worker?.customRatePer1000 ?? settings.defaultRatePer1000);
+    const grossAmount = (Number(data.piecesCount) / 1000) * ratePer1000;
 
     const advanceId = data.advanceAmount && data.advanceAmount > 0 ? `adv-${Date.now()}-prod` : undefined;
+
+    const shouldAutoApprove = data.status === 'approved' || currentUser?.role === 'admin';
 
     const newLog: ProductionLog = {
       id: `prod-${Date.now()}`,
       workerId: data.workerId,
       workerName,
       date: data.date,
-      shift: data.shift,
+      shift: data.shift || 'morning',
       piecesCount: Number(data.piecesCount),
       ratePer1000,
       grossAmount,
@@ -352,7 +362,9 @@ export const BakeryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       advanceAmount: data.advanceAmount && data.advanceAmount > 0 ? Number(data.advanceAmount) : 0,
       advanceCategory: data.advanceCategory || 'cash',
       advanceNotes: data.advanceNotes || '',
-      status: 'pending',
+      status: data.status || (shouldAutoApprove ? 'approved' : 'pending'),
+      reviewedAt: shouldAutoApprove ? new Date().toISOString() : undefined,
+      reviewedBy: shouldAutoApprove ? (settings.ownerName || 'مدير المخبز') : undefined,
       createdAt: new Date().toISOString(),
     };
 

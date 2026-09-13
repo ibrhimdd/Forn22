@@ -21,6 +21,12 @@ import {
   ShieldCheck,
   Building2,
   Filter,
+  PlusCircle,
+  Plus,
+  Coins,
+  DollarSign,
+  AlertCircle,
+  Sparkles,
 } from 'lucide-react';
 
 interface Props {
@@ -39,10 +45,98 @@ export const WorkerProfileReport: React.FC<Props> = ({
     advances,
     settings,
     getWorkerFinancials,
+    addProductionLog,
+    addAdvance,
   } = useBakery();
 
   const [activeTab, setActiveTab] = useState<'all' | 'production' | 'advances'>('all');
   const [dateFilter, setDateFilter] = useState<'all' | 'unsettled' | 'settled'>('all');
+
+  // Modals state
+  const [showAddProductionModal, setShowAddProductionModal] = useState(false);
+  const [showAddAdvanceModal, setShowAddAdvanceModal] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Form states for adding Production
+  const todayStr = new Date().toISOString().split('T')[0];
+  const effectiveRate = worker.customRatePer1000 ?? settings.defaultRatePer1000;
+
+  const [prodPieces, setProdPieces] = useState('');
+  const [prodDate, setProdDate] = useState(todayStr);
+  const [prodShift, setProdShift] = useState<'morning' | 'evening'>('morning');
+  const [prodRate, setProdRate] = useState<number>(effectiveRate);
+  const [prodAdvance, setProdAdvance] = useState('0');
+  const [prodNotes, setProdNotes] = useState('');
+  const [prodError, setProdError] = useState('');
+
+  // Form states for adding Advance
+  const [advAmount, setAdvAmount] = useState('');
+  const [advDate, setAdvDate] = useState(todayStr);
+  const [advCategory, setAdvCategory] = useState<'cash' | 'food' | 'supplies' | 'other'>('cash');
+  const [advNotes, setAdvNotes] = useState('');
+  const [advError, setAdvError] = useState('');
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 4000);
+  };
+
+  const handleCreateProduction = (e: React.FormEvent) => {
+    e.preventDefault();
+    setProdError('');
+    const pieces = Number(prodPieces);
+    if (!pieces || pieces <= 0) {
+      setProdError('يرجى إدخال كمية اللقم بشكل صحيح (أكبر من صفر)');
+      return;
+    }
+    const advanceAmount = Number(prodAdvance) || 0;
+    if (advanceAmount < 0) {
+      setProdError('السلفة المرفقة لا يمكن أن تكون قيمة سالبة');
+      return;
+    }
+
+    addProductionLog({
+      workerId: worker.id,
+      date: prodDate,
+      shift: prodShift,
+      piecesCount: pieces,
+      ratePer1000: prodRate,
+      advanceAmount: advanceAmount,
+      notes: prodNotes.trim(),
+      status: 'approved',
+    });
+
+    setShowAddProductionModal(false);
+    setProdPieces('');
+    setProdAdvance('0');
+    setProdNotes('');
+    showToast(`تمت إضافة يومية ${pieces.toLocaleString('ar-EG')} لقمة واعتمادها بنجاح لحساب ${worker.name}`);
+  };
+
+  const handleCreateAdvance = (e: React.FormEvent) => {
+    e.preventDefault();
+    setAdvError('');
+    const amount = Number(advAmount);
+    if (!amount || amount <= 0) {
+      setAdvError('يرجى إدخال مبلغ السلفة بشكل صحيح (أكبر من صفر)');
+      return;
+    }
+
+    addAdvance({
+      workerId: worker.id,
+      date: advDate,
+      amount,
+      category: advCategory,
+      notes: advNotes.trim() || 'سلفة من الإدارة',
+    });
+
+    setShowAddAdvanceModal(false);
+    setAdvAmount('');
+    setAdvNotes('');
+    showToast(`تم قيد سلفة بمبلغ ${amount.toLocaleString('ar-EG')} ${settings.currency} لحساب ${worker.name}`);
+  };
 
   // Compute worker financial summary
   const financials = getWorkerFinancials(worker.id);
@@ -78,8 +172,6 @@ export const WorkerProfileReport: React.FC<Props> = ({
     0
   );
 
-  const effectiveRate = worker.customRatePer1000 ?? settings.defaultRatePer1000;
-
   const handlePrint = () => {
     window.print();
   };
@@ -87,6 +179,23 @@ export const WorkerProfileReport: React.FC<Props> = ({
   return (
     <div className="space-y-6">
       
+      {/* Toast Notification Banner */}
+      {toastMessage && (
+        <div className="p-4 rounded-2xl bg-emerald-900/90 border border-emerald-600 text-emerald-100 text-xs font-bold flex items-center justify-between shadow-xl animate-in fade-in slide-in-from-top-4 duration-300 no-print">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 className="w-5 h-5 text-emerald-300 shrink-0" />
+            <span>{toastMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setToastMessage(null)}
+            className="p-1 rounded-lg hover:bg-emerald-800 text-emerald-200"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Top Breadcrumb & Action Bar */}
       <div className="bg-white rounded-2xl p-4 sm:p-5 border border-stone-200/90 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 no-print">
         <div className="flex items-center gap-3">
@@ -112,12 +221,47 @@ export const WorkerProfileReport: React.FC<Props> = ({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Action 1: Add Production / Quantity */}
+          <button
+            type="button"
+            onClick={() => {
+              setProdPieces('');
+              setProdDate(new Date().toISOString().split('T')[0]);
+              setProdRate(effectiveRate);
+              setProdAdvance('0');
+              setProdNotes('');
+              setProdError('');
+              setShowAddProductionModal(true);
+            }}
+            className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-stone-950 font-black text-xs flex items-center gap-1.5 shadow-sm shadow-amber-500/20 active:scale-95 transition-all"
+          >
+            <PlusCircle className="w-4 h-4" />
+            <span>إضافة كمية (إنتاج)</span>
+          </button>
+
+          {/* Action 2: Add Advance */}
+          <button
+            type="button"
+            onClick={() => {
+              setAdvAmount('');
+              setAdvDate(new Date().toISOString().split('T')[0]);
+              setAdvCategory('cash');
+              setAdvNotes('');
+              setAdvError('');
+              setShowAddAdvanceModal(true);
+            }}
+            className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white font-black text-xs flex items-center gap-1.5 shadow-sm shadow-red-600/20 active:scale-95 transition-all"
+          >
+            <Coins className="w-4 h-4" />
+            <span>إضافة سلفة</span>
+          </button>
+
           <button
             onClick={handlePrint}
-            className="px-3.5 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-bold flex items-center gap-1.5 transition-colors"
+            className="px-3 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold flex items-center gap-1.5 transition-colors"
           >
             <Printer className="w-4 h-4" />
-            <span>طباعة التقرير الكامل</span>
+            <span>طباعة التقرير</span>
           </button>
 
           {worker.status === 'archived' && onOpenSettlementModal && (
@@ -343,16 +487,34 @@ export const WorkerProfileReport: React.FC<Props> = ({
       {/* SECTION 1: DETAILED PRODUCTION LOGS TABLE */}
       {(activeTab === 'all' || activeTab === 'production') && (
         <div className="bg-white rounded-2xl border border-stone-200 shadow-xs overflow-hidden">
-          <div className="p-4 sm:p-5 border-b border-stone-100 flex items-center justify-between">
+          <div className="p-4 sm:p-5 border-b border-stone-100 flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-2">
               <Layers className="w-5 h-5 text-amber-600" />
               <h3 className="text-sm font-extrabold text-stone-900">
                 سجل يوميات وكميات الإنتاج (تفاصيل كل يوم)
               </h3>
             </div>
-            <span className="text-xs text-stone-500 font-medium">
-              عدد اليوميات: {filteredLogs.length}
-            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setProdPieces('');
+                  setProdDate(new Date().toISOString().split('T')[0]);
+                  setProdRate(effectiveRate);
+                  setProdAdvance('0');
+                  setProdNotes('');
+                  setProdError('');
+                  setShowAddProductionModal(true);
+                }}
+                className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-black text-xs flex items-center gap-1.5 shadow-xs transition-all"
+              >
+                <Plus className="w-4 h-4" />
+                <span>إضافة يومية جديدة</span>
+              </button>
+              <span className="text-xs text-stone-500 font-medium">
+                ({filteredLogs.length})
+              </span>
+            </div>
           </div>
 
           {filteredLogs.length === 0 ? (
@@ -467,16 +629,33 @@ export const WorkerProfileReport: React.FC<Props> = ({
       {/* SECTION 2: DETAILED ADVANCES TABLE */}
       {(activeTab === 'all' || activeTab === 'advances') && (
         <div className="bg-white rounded-2xl border border-stone-200 shadow-xs overflow-hidden">
-          <div className="p-4 sm:p-5 border-b border-stone-100 flex items-center justify-between">
+          <div className="p-4 sm:p-5 border-b border-stone-100 flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-2">
               <Wallet className="w-5 h-5 text-red-600" />
               <h3 className="text-sm font-extrabold text-stone-900">
                 سجل السلف والمصروفات اليومية المسحوبة
               </h3>
             </div>
-            <span className="text-xs text-stone-500 font-medium">
-              عدد السلف: {filteredAdvances.length}
-            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setAdvAmount('');
+                  setAdvDate(new Date().toISOString().split('T')[0]);
+                  setAdvCategory('cash');
+                  setAdvNotes('');
+                  setAdvError('');
+                  setShowAddAdvanceModal(true);
+                }}
+                className="px-3 py-1.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-black text-xs flex items-center gap-1.5 shadow-xs transition-all"
+              >
+                <Plus className="w-4 h-4" />
+                <span>إضافة سلفة جديدة</span>
+              </button>
+              <span className="text-xs text-stone-500 font-medium">
+                ({filteredAdvances.length})
+              </span>
+            </div>
           </div>
 
           {filteredAdvances.length === 0 ? (
@@ -553,6 +732,389 @@ export const WorkerProfileReport: React.FC<Props> = ({
           </span>
         </div>
       </div>
+
+      {/* ================= MODAL 1: ADD PRODUCTION / QUANTITY ================= */}
+      {showAddProductionModal && (
+        <div className="fixed inset-0 z-50 bg-stone-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-stone-900 border border-stone-800 text-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl p-6 relative animate-in fade-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-stone-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center">
+                  <Layers className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-white">
+                    إضافة كمية إنتاج (يومية)
+                  </h3>
+                  <p className="text-xs text-stone-400">
+                    للعامل: <span className="text-amber-300 font-bold">{worker.name}</span> ({worker.roleTitle})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddProductionModal(false)}
+                className="p-2 rounded-xl text-stone-400 hover:text-white hover:bg-stone-800 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Error Message */}
+            {prodError && (
+              <div className="mt-4 p-3 rounded-xl bg-red-950/60 border border-red-800 text-red-300 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                <span>{prodError}</span>
+              </div>
+            )}
+
+            {/* Form */}
+            <form onSubmit={handleCreateProduction} className="mt-4 space-y-4">
+              {/* Field 1: Pieces Count */}
+              <div>
+                <label className="block text-xs font-semibold text-stone-300 mb-1.5">
+                  الكمية (عدد اللقم المنتجة): *
+                </label>
+                <input
+                  type="number"
+                  required
+                  autoFocus
+                  min="1"
+                  step="50"
+                  dir="ltr"
+                  placeholder="مثال: 3500"
+                  value={prodPieces}
+                  onChange={(e) => {
+                    setProdError('');
+                    setProdPieces(e.target.value);
+                  }}
+                  className="w-full p-3 bg-stone-800 border border-stone-700 rounded-xl text-white font-mono text-base font-black focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-center"
+                />
+
+                {/* Quick Add Pills */}
+                <div className="flex items-center gap-1.5 mt-2 flex-wrap justify-center">
+                  <span className="text-[11px] text-stone-400 ml-1">تعبئة سريعة:</span>
+                  {[2000, 3000, 4000, 5000, 6000].map((val) => (
+                    <button
+                      key={val}
+                      type="button"
+                      onClick={() => setProdPieces(String(val))}
+                      className="px-2.5 py-1 rounded-lg bg-stone-800 hover:bg-amber-500/20 text-stone-300 hover:text-amber-300 text-xs font-mono font-bold border border-stone-700 transition-colors"
+                    >
+                      {val.toLocaleString('ar-EG')}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Grid: Rate & Shift */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Rate per 1000 */}
+                <div>
+                  <label className="block text-xs font-semibold text-stone-300 mb-1.5">
+                    سعر الـ 1000 لقمة ({settings.currency}): *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    step="0.5"
+                    dir="ltr"
+                    value={prodRate}
+                    onChange={(e) => setProdRate(Number(e.target.value))}
+                    className="w-full p-2.5 bg-stone-800 border border-stone-700 rounded-xl text-amber-400 font-mono font-bold text-sm focus:ring-2 focus:ring-amber-500 text-center"
+                  />
+                  <span className="text-[10px] text-stone-500 mt-1 block">
+                    (سعر العامل المعتمد: {effectiveRate} {settings.currency})
+                  </span>
+                </div>
+
+                {/* Shift */}
+                <div>
+                  <label className="block text-xs font-semibold text-stone-300 mb-1.5">
+                    الوردية:
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setProdShift('morning')}
+                      className={`py-2 px-3 rounded-xl text-xs font-bold transition-all border ${
+                        prodShift === 'morning'
+                          ? 'bg-amber-500/20 border-amber-500 text-amber-300'
+                          : 'bg-stone-800 border-stone-700 text-stone-400 hover:text-white'
+                      }`}
+                    >
+                      صباحية
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setProdShift('evening')}
+                      className={`py-2 px-3 rounded-xl text-xs font-bold transition-all border ${
+                        prodShift === 'evening'
+                          ? 'bg-indigo-500/20 border-indigo-500 text-indigo-300'
+                          : 'bg-stone-800 border-stone-700 text-stone-400 hover:text-white'
+                      }`}
+                    >
+                      مسائية
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Calculated Earnings Live Preview */}
+              {Number(prodPieces) > 0 && (
+                <div className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-500/10 to-amber-600/5 border border-amber-500/30 flex items-center justify-between">
+                  <div>
+                    <span className="text-xs text-amber-400 font-bold block">
+                      حساب مستحق اليومية التلقائي:
+                    </span>
+                    <span className="text-[11px] text-stone-400 font-mono">
+                      {(Number(prodPieces) / 1000).toFixed(2)} ألف لقمة × {prodRate} {settings.currency}
+                    </span>
+                  </div>
+                  <div className="text-left">
+                    <span className="text-lg font-black text-amber-300 font-mono">
+                      {((Number(prodPieces) / 1000) * prodRate).toFixed(2)}
+                    </span>
+                    <span className="text-xs text-stone-400 mr-1">{settings.currency}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Field: Date */}
+              <div>
+                <label className="block text-xs font-semibold text-stone-300 mb-1.5">
+                  تاريخ اليومية: *
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={prodDate}
+                  onChange={(e) => setProdDate(e.target.value)}
+                  className="w-full p-2.5 bg-stone-800 border border-stone-700 rounded-xl text-white text-xs focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+
+              {/* Field: Attached Advance (السلفة المرفقة) */}
+              <div>
+                <label className="block text-xs font-semibold text-stone-300 mb-1.5">
+                  السلفة اليومية المرفقة (إجباري - تقبل أي رقم حتى 0): *
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    min="0"
+                    step="10"
+                    required
+                    dir="ltr"
+                    placeholder="0"
+                    value={prodAdvance}
+                    onChange={(e) => setProdAdvance(e.target.value)}
+                    className="w-full p-2.5 pl-12 bg-stone-800 border border-stone-700 rounded-xl text-red-400 font-mono font-bold text-sm focus:ring-2 focus:ring-red-500"
+                  />
+                  <span className="absolute left-3 top-2.5 text-xs text-stone-500 font-bold">
+                    {settings.currency}
+                  </span>
+                </div>
+                <p className="text-[10px] text-stone-400 mt-1">
+                  * إذا أدخلت مبلغاً أكبر من 0، فسيتم تسجيل سلفة مرفقة مع اليومية تلقائياً وخصمها من الحساب.
+                </p>
+              </div>
+
+              {/* Field: Notes */}
+              <div>
+                <label className="block text-xs font-semibold text-stone-300 mb-1.5">
+                  ملاحظات اليومية (اختياري):
+                </label>
+                <input
+                  type="text"
+                  placeholder="أي تفاصيل أو ملاحظات عن اليومية..."
+                  value={prodNotes}
+                  onChange={(e) => setProdNotes(e.target.value)}
+                  className="w-full p-2.5 bg-stone-800 border border-stone-700 rounded-xl text-white text-xs focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+
+              {/* Notice */}
+              <div className="p-3 rounded-xl bg-stone-800/80 border border-stone-700/70 text-[11px] text-stone-400 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>سيتم اعتماد هذه اليومية وإضافتها فوراً لحساب العامل وتحديث إجمالي اللقم والمستحقات.</span>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="submit"
+                  className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-stone-950 font-black text-xs shadow-lg shadow-amber-900/40 transition-all flex items-center justify-center gap-2"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>حفظ واعتماد اليومية فوراً</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAddProductionModal(false)}
+                  className="py-3 px-4 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 font-bold text-xs transition-colors"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL 2: ADD ADVANCE ================= */}
+      {showAddAdvanceModal && (
+        <div className="fixed inset-0 z-50 bg-stone-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-stone-900 border border-stone-800 text-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl p-6 relative animate-in fade-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-stone-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-red-500/20 border border-red-500/40 text-red-400 flex items-center justify-center">
+                  <Coins className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-white">
+                    إضافة سلفة نقدية / مسحوبات
+                  </h3>
+                  <p className="text-xs text-stone-400">
+                    للعامل: <span className="text-amber-300 font-bold">{worker.name}</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddAdvanceModal(false)}
+                className="p-2 rounded-xl text-stone-400 hover:text-white hover:bg-stone-800 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Error Message */}
+            {advError && (
+              <div className="mt-4 p-3 rounded-xl bg-red-950/60 border border-red-800 text-red-300 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                <span>{advError}</span>
+              </div>
+            )}
+
+            {/* Form */}
+            <form onSubmit={handleCreateAdvance} className="mt-4 space-y-4">
+              {/* Field 1: Advance Amount */}
+              <div>
+                <label className="block text-xs font-semibold text-stone-300 mb-1.5">
+                  مبلغ السلفة ({settings.currency}): *
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    required
+                    autoFocus
+                    min="1"
+                    step="10"
+                    dir="ltr"
+                    placeholder="مثال: 200"
+                    value={advAmount}
+                    onChange={(e) => {
+                      setAdvError('');
+                      setAdvAmount(e.target.value);
+                    }}
+                    className="w-full p-3 pl-12 bg-stone-800 border border-stone-700 rounded-xl text-red-400 font-mono text-xl font-black focus:ring-2 focus:ring-red-500 text-center"
+                  />
+                  <span className="absolute left-3 top-3.5 text-xs text-stone-500 font-bold">
+                    {settings.currency}
+                  </span>
+                </div>
+
+                {/* Quick Advance Pills */}
+                <div className="flex items-center gap-1.5 mt-2 flex-wrap justify-center">
+                  {[50, 100, 150, 200, 300, 500].map((val) => (
+                    <button
+                      key={val}
+                      type="button"
+                      onClick={() => setAdvAmount(String(val))}
+                      className="px-2.5 py-1 rounded-lg bg-stone-800 hover:bg-red-500/20 text-stone-300 hover:text-red-300 text-xs font-mono font-bold border border-stone-700 transition-colors"
+                    >
+                      {val} {settings.currency}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Field 2: Date */}
+              <div>
+                <label className="block text-xs font-semibold text-stone-300 mb-1.5">
+                  تاريخ استلام السلفة: *
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={advDate}
+                  onChange={(e) => setAdvDate(e.target.value)}
+                  className="w-full p-2.5 bg-stone-800 border border-stone-700 rounded-xl text-white text-xs focus:ring-2 focus:ring-red-500"
+                />
+              </div>
+
+              {/* Field 3: Category */}
+              <div>
+                <label className="block text-xs font-semibold text-stone-300 mb-1.5">
+                  بند / نوع السلفة:
+                </label>
+                <select
+                  value={advCategory}
+                  onChange={(e) => setAdvCategory(e.target.value as any)}
+                  className="w-full p-2.5 bg-stone-800 border border-stone-700 rounded-xl text-white text-xs focus:ring-2 focus:ring-red-500"
+                >
+                  <option value="cash">نقدية (كاش مصاريف يد)</option>
+                  <option value="food">طعام / وجبات ومشروبات</option>
+                  <option value="supplies">لوازم ومشتريات خاصة</option>
+                  <option value="other">مصاريف أخرى</option>
+                </select>
+              </div>
+
+              {/* Field 4: Notes */}
+              <div>
+                <label className="block text-xs font-semibold text-stone-300 mb-1.5">
+                  بيان السلفة / الملاحظات (اختياري):
+                </label>
+                <input
+                  type="text"
+                  placeholder="سبب السلفة (مثال: سلفة نقدية مستعجلة)..."
+                  value={advNotes}
+                  onChange={(e) => setAdvNotes(e.target.value)}
+                  className="w-full p-2.5 bg-stone-800 border border-stone-700 rounded-xl text-white text-xs focus:ring-2 focus:ring-red-500"
+                />
+              </div>
+
+              {/* Notice */}
+              <div className="p-3 rounded-xl bg-red-950/40 border border-red-900/50 text-[11px] text-red-300 flex items-center gap-2">
+                <Wallet className="w-4 h-4 text-red-400 shrink-0" />
+                <span>سيتم خصم هذه السلفة مباشرة من صافي مستحقات العامل في الحساب الجاري.</span>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="submit"
+                  className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white font-black text-xs shadow-lg shadow-red-950/40 transition-all flex items-center justify-center gap-2"
+                >
+                  <Wallet className="w-4 h-4" />
+                  <span>تسجيل السلفة وخصمها فوراً</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAddAdvanceModal(false)}
+                  className="py-3 px-4 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 font-bold text-xs transition-colors"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );
