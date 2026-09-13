@@ -13,6 +13,8 @@ import {
   Layers,
   Sparkles,
   Wallet,
+  SlidersHorizontal,
+  Edit3,
 } from 'lucide-react';
 
 export const ProductionReview: React.FC = () => {
@@ -30,6 +32,8 @@ export const ProductionReview: React.FC = () => {
   const [editingLog, setEditingLog] = useState<ProductionLog | null>(null);
   const [adjustedPieces, setAdjustedPieces] = useState<number>(0);
   const [adjustedRate, setAdjustedRate] = useState<number>(0);
+  const [adjustedAdvance, setAdjustedAdvance] = useState<number>(0);
+  const [adjustedNotes, setAdjustedNotes] = useState<string>('');
 
   // Filter logs
   const filteredLogs = productionLogs.filter((log) => {
@@ -60,11 +64,19 @@ export const ProductionReview: React.FC = () => {
     setEditingLog(log);
     setAdjustedPieces(log.piecesCount);
     setAdjustedRate(log.ratePer1000);
+    setAdjustedAdvance(log.advanceAmount ?? 0);
+    setAdjustedNotes(log.notes || '');
   };
 
   const handleConfirmApproveWithAdjust = () => {
     if (editingLog) {
-      approveProductionLog(editingLog.id, adjustedPieces, adjustedRate);
+      approveProductionLog(
+        editingLog.id,
+        adjustedPieces,
+        adjustedRate,
+        adjustedAdvance,
+        adjustedNotes
+      );
       setEditingLog(null);
     }
   };
@@ -307,54 +319,78 @@ export const ProductionReview: React.FC = () => {
 
                       {/* Action buttons */}
                       <td className="py-3.5 px-4 text-center">
-                        <div className="flex items-center justify-center gap-1.5">
+                        <div className="flex items-center justify-center gap-1.5 flex-wrap">
                           {log.status === 'pending' ? (
                             <>
                               {/* Direct Approve */}
                               <button
                                 onClick={() => approveProductionLog(log.id)}
-                                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition-colors"
-                                title="تأكيد واعتماد اليومية بالسعر والكمية الحالية"
+                                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition-colors active:scale-98"
+                                title="اعتماد فوري بالقيم الحالية"
                               >
                                 <CheckCircle className="w-3.5 h-3.5" />
-                                <span>تأكيد واعتماد</span>
+                                <span>اعتماد مباشر</span>
+                              </button>
+
+                              {/* Prominent Edit Quantity or Advance Button */}
+                              <button
+                                onClick={() => handleOpenEdit(log)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs transition-colors active:scale-98"
+                                title="تعديل في الكمية أو في السلفة المرفقة ثم الاعتماد"
+                              >
+                                <SlidersHorizontal className="w-3.5 h-3.5" />
+                                <span>تعديل الكمية / السلفة</span>
                               </button>
 
                               {/* Reject button */}
                               <button
                                 onClick={() => handleOpenReject(log.id)}
-                                className="p-1.5 rounded-lg bg-red-100 hover:bg-red-200 text-red-700 transition-colors"
+                                className="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 transition-colors"
                                 title="رفض اليومية وتدوين السبب"
                               >
                                 <XCircle className="w-4 h-4" />
                               </button>
-
-                              {/* Edit pieces/rate before approving */}
-                              <button
-                                onClick={() => handleOpenEdit(log)}
-                                className="px-2 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 text-[11px] font-medium"
-                                title="تعديل الكمية أو السعر ثم الاعتماد"
-                              >
-                                تعديل
-                              </button>
                             </>
                           ) : (
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-1.5 flex-wrap justify-center">
                               {log.status === 'approved' && (
-                                <button
-                                  onClick={() => handleOpenReject(log.id)}
-                                  className="text-stone-400 hover:text-red-600 text-[11px] px-2 py-1 rounded hover:bg-red-50"
-                                >
-                                  إلغاء الاعتماد
-                                </button>
+                                <>
+                                  <button
+                                    onClick={() => handleOpenEdit(log)}
+                                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-stone-100 hover:bg-amber-50 text-stone-700 hover:text-amber-800 border border-stone-200 text-[11px] font-bold transition-colors"
+                                    title="تعديل الكمية أو السلفة المرفقة ليومية معتمدة"
+                                  >
+                                    <SlidersHorizontal className="w-3 h-3 text-amber-600" />
+                                    <span>تعديل الكمية/السلفة</span>
+                                  </button>
+
+                                  <button
+                                    onClick={() => handleOpenReject(log.id)}
+                                    className="text-stone-400 hover:text-red-600 text-[11px] px-2 py-1 rounded hover:bg-red-50 transition-colors"
+                                    title="إلغاء الاعتماد وتحويلها لمرفوضة"
+                                  >
+                                    إلغاء الاعتماد
+                                  </button>
+                                </>
                               )}
                               {log.status === 'rejected' && (
-                                <button
-                                  onClick={() => approveProductionLog(log.id)}
-                                  className="text-stone-400 hover:text-emerald-600 text-[11px] px-2 py-1 rounded hover:bg-emerald-50 font-medium"
-                                >
-                                  إعادة اعتماد
-                                </button>
+                                <>
+                                  <button
+                                    onClick={() => handleOpenEdit(log)}
+                                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-bold shadow-xs transition-colors"
+                                    title="تعديل الكمية أو السلفة وإعادة الاعتماد"
+                                  >
+                                    <SlidersHorizontal className="w-3 h-3" />
+                                    <span>تعديل واعتماد</span>
+                                  </button>
+
+                                  <button
+                                    onClick={() => approveProductionLog(log.id)}
+                                    className="text-stone-400 hover:text-emerald-600 text-[11px] px-2 py-1 rounded hover:bg-emerald-50 font-medium"
+                                  >
+                                    إعادة اعتماد
+                                  </button>
+                                </>
                               )}
                             </div>
                           )}
@@ -414,62 +450,220 @@ export const ProductionReview: React.FC = () => {
         </div>
       )}
 
-      {/* Edit & Approve Modal */}
+      {/* Edit & Approve Modal (تعديل الكمية والسلفة المرفقة) */}
       {editingLog && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-stone-200 rounded-2xl p-6 max-w-md w-full text-right shadow-2xl">
-            <h3 className="text-base font-bold text-stone-900 mb-2">
-              تعديل بيانات اليومية واعتمادها
-            </h3>
-            <p className="text-xs text-stone-500 mb-4">
-              العامل: <span className="font-bold text-stone-800">{editingLog.workerName}</span> | التاريخ: {editingLog.date}
-            </p>
-
-            <div className="space-y-4 mb-6">
-              <div>
-                <label className="block text-xs font-bold text-stone-700 mb-1">
-                  عدد اللقم الفعلي بعد الجرد:
-                </label>
-                <input
-                  type="number"
-                  value={adjustedPieces}
-                  onChange={(e) => setAdjustedPieces(Number(e.target.value))}
-                  className="w-full p-2.5 bg-stone-50 border border-stone-300 rounded-xl text-sm font-bold text-stone-800 focus:ring-2 focus:ring-amber-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-stone-700 mb-1">
-                  سعر الـ 1000 لقمة ({settings.currency}):
-                </label>
-                <input
-                  type="number"
-                  value={adjustedRate}
-                  onChange={(e) => setAdjustedRate(Number(e.target.value))}
-                  className="w-full p-2.5 bg-stone-50 border border-stone-300 rounded-xl text-sm font-bold text-stone-800 focus:ring-2 focus:ring-amber-500"
-                />
-              </div>
-
-              <div className="bg-amber-50 p-3 rounded-xl border border-amber-200 flex justify-between items-center text-xs">
-                <span className="text-amber-800 font-medium">المستحق المحسوب بعد التعديل:</span>
-                <span className="font-extrabold text-amber-900 text-sm font-mono">
-                  {((adjustedPieces / 1000) * adjustedRate).toFixed(2)} {settings.currency}
-                </span>
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white border border-stone-200 rounded-3xl p-5 sm:p-6 max-w-lg w-full text-right shadow-2xl my-8">
+            
+            {/* Header */}
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-stone-100">
+              <div className="flex items-center gap-2.5 text-amber-700">
+                <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center font-bold">
+                  <SlidersHorizontal className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-stone-900">
+                    تعديل الكمية والسلفة المرفقة
+                  </h3>
+                  <p className="text-[11px] text-stone-500">
+                    مراجعة وتدقيق اليومية قبل أو بعد الاعتماد
+                  </p>
+                </div>
               </div>
             </div>
 
-            <div className="flex gap-2 justify-end">
+            {/* Worker and Date Info */}
+            <div className="flex items-center justify-between text-xs bg-stone-50 px-3.5 py-2.5 rounded-xl border border-stone-200/80 mb-4">
+              <span className="text-stone-700">
+                العامل: <strong className="text-stone-950 font-bold">{editingLog.workerName}</strong>
+              </span>
+              <span className="text-stone-600 font-mono text-[11px]">
+                التاريخ: {editingLog.date}
+              </span>
+            </div>
+
+            <div className="space-y-4 mb-5 text-xs">
+              
+              {/* 1. الكمية (عدد اللقم المنتجة) */}
+              <div>
+                <label className="block font-bold text-stone-900 mb-1.5 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Layers className="w-4 h-4 text-amber-600" />
+                    <span>كمية اللقم المنتجة بعد الجرد والتدقيق:</span>
+                  </span>
+                  <span className="text-stone-500 font-normal">
+                    (الأصلي: {editingLog.piecesCount.toLocaleString('ar-EG')})
+                  </span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="50"
+                    min="0"
+                    value={adjustedPieces}
+                    onChange={(e) => setAdjustedPieces(Math.max(0, Number(e.target.value)))}
+                    className="w-full p-3 bg-white border border-stone-300 rounded-xl text-stone-950 text-base font-black focus:ring-2 focus:ring-amber-500 shadow-2xs font-mono"
+                  />
+                  <span className="absolute left-3 top-3.5 text-xs text-stone-400 font-bold">
+                    لقمة
+                  </span>
+                </div>
+
+                {/* Quick adjustments */}
+                <div className="flex gap-1.5 mt-2 flex-wrap">
+                  {[-500, -200, -100, +100, +200, +500].map((delta) => (
+                    <button
+                      key={delta}
+                      type="button"
+                      onClick={() => setAdjustedPieces((prev) => Math.max(0, prev + delta))}
+                      className="px-2 py-1 bg-stone-100 hover:bg-amber-100 text-stone-700 hover:text-amber-900 rounded-lg text-[11px] font-mono transition-colors font-bold"
+                    >
+                      {delta > 0 ? `+${delta}` : delta}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setAdjustedPieces(editingLog.piecesCount)}
+                    className="px-2 py-1 bg-stone-200 hover:bg-stone-300 text-stone-700 rounded-lg text-[11px] transition-colors"
+                  >
+                    استعادة الأصل
+                  </button>
+                </div>
+              </div>
+
+              {/* 2. السلفة اليومية المرفقة */}
+              <div>
+                <label className="block font-bold text-stone-900 mb-1.5 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Wallet className="w-4 h-4 text-red-500" />
+                    <span>السلفة اليومية المرفقة بنفس اليوم:</span>
+                  </span>
+                  <span className="text-stone-500 font-normal">
+                    (تقبل أي رقم أو 0 للإلغاء)
+                  </span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="5"
+                    min="0"
+                    value={adjustedAdvance}
+                    onChange={(e) => setAdjustedAdvance(Math.max(0, Number(e.target.value)))}
+                    className={`w-full p-2.5 bg-white border rounded-xl font-mono font-bold text-sm focus:ring-2 ${
+                      adjustedAdvance > 0
+                        ? 'border-red-300 text-red-950 focus:ring-red-400 bg-red-50/30'
+                        : 'border-stone-300 text-stone-900 focus:ring-amber-500'
+                    }`}
+                  />
+                  <span className="absolute left-3 top-2.5 text-xs font-bold text-stone-400">
+                    {settings.currency}
+                  </span>
+                </div>
+
+                {/* Quick Advance presets */}
+                <div className="flex gap-1.5 mt-2 flex-wrap">
+                  {[0, 50, 100, 150, 200, 300].map((amt) => (
+                    <button
+                      key={amt}
+                      type="button"
+                      onClick={() => setAdjustedAdvance(amt)}
+                      className={`px-2.5 py-0.5 rounded-lg text-[11px] font-mono font-semibold transition-colors border ${
+                        adjustedAdvance === amt
+                          ? 'bg-red-500 text-white border-red-600'
+                          : 'bg-white hover:bg-stone-100 text-stone-700 border-stone-200'
+                      }`}
+                    >
+                      {amt === 0 ? '0 (إلغاء السلفة)' : `${amt} ${settings.currency}`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 3. سعر الألف لقمة وملاحظات */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1">
+                    سعر الـ 1000 لقمة ({settings.currency}):
+                  </label>
+                  <input
+                    type="number"
+                    value={adjustedRate}
+                    onChange={(e) => setAdjustedRate(Math.max(0, Number(e.target.value)))}
+                    className="w-full p-2.5 bg-stone-50 border border-stone-300 rounded-xl text-xs font-bold text-stone-800 focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1">
+                    ملاحظات الإدارة:
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="ملاحظات حول التعديل إن وجدت..."
+                    value={adjustedNotes}
+                    onChange={(e) => setAdjustedNotes(e.target.value)}
+                    className="w-full p-2.5 bg-stone-50 border border-stone-300 rounded-xl text-xs text-stone-800 focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+              </div>
+
+              {/* Live Breakdown Box */}
+              {(() => {
+                const calcGross = (adjustedPieces / 1000) * adjustedRate;
+                const calcNet = calcGross - adjustedAdvance;
+                return (
+                  <div className="bg-stone-50 p-3.5 rounded-2xl border border-stone-200 space-y-2 mt-3">
+                    <div className="flex justify-between items-center text-xs text-stone-600">
+                      <span>أجر الإنتاج المحسوب ({(adjustedPieces / 1000).toFixed(2)} ألف × {adjustedRate}):</span>
+                      <span className="font-bold text-stone-900 font-mono">
+                        {calcGross.toLocaleString('ar-EG', {
+                          minimumFractionDigits: 1,
+                          maximumFractionDigits: 2,
+                        })} {settings.currency}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between items-center text-xs text-stone-600">
+                      <span>السلفة المرفقة المعتمدة:</span>
+                      <span className={`font-bold font-mono ${adjustedAdvance > 0 ? 'text-red-600' : 'text-stone-500'}`}>
+                        {adjustedAdvance > 0
+                          ? `- ${adjustedAdvance.toLocaleString('ar-EG')} ${settings.currency}`
+                          : `0 ${settings.currency}`}
+                      </span>
+                    </div>
+
+                    <div className="pt-2 border-t border-stone-200 flex justify-between items-center text-xs">
+                      <span className="font-bold text-stone-900">صافي المستحق الجديد لليوم:</span>
+                      <span className={`text-base font-black font-mono ${
+                        calcNet < 0 ? 'text-red-600' : 'text-amber-800'
+                      }`}>
+                        {calcNet.toLocaleString('ar-EG', {
+                          minimumFractionDigits: 1,
+                          maximumFractionDigits: 2,
+                        })} {settings.currency}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+            </div>
+
+            <div className="flex gap-2 justify-end pt-2 border-t border-stone-100">
               <button
+                type="button"
                 onClick={() => setEditingLog(null)}
-                className="px-4 py-2 rounded-xl bg-stone-100 text-stone-600 text-xs font-semibold hover:bg-stone-200"
+                className="px-4 py-2.5 rounded-xl bg-stone-100 text-stone-600 text-xs font-semibold hover:bg-stone-200 transition-colors"
               >
                 إلغاء
               </button>
               <button
+                type="button"
                 onClick={handleConfirmApproveWithAdjust}
-                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold"
+                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 active:scale-98"
               >
-                حفظ واعتماد اليومية
+                <CheckCircle className="w-4 h-4" />
+                <span>حفظ التعديلات واعتماد اليومية</span>
               </button>
             </div>
           </div>

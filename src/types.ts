@@ -28,7 +28,9 @@ export interface WorkerProfile {
   id: string;
   code: string; // e.g., W-101
   name: string;
-  phone: string;
+  username?: string; // اسم المستخدم لتسجيل الدخول
+  password?: string; // كلمة المرور / الباسورد
+  phone?: string;
   roleTitle: WorkerRoleTitle;
   customRatePer1000: number | null; // if null, uses bakery global default
   joinDate: string;
@@ -55,6 +57,7 @@ export interface ProductionLog {
   ratePer1000: number; // السعر لكل 1000 لقمة المعتمد لهذه اليومية
   grossAmount: number; // (piecesCount / 1000) * ratePer1000
   notes?: string;
+  advanceId?: string; // معرف السلفة المرفقة باليومية إن وجدت
   advanceAmount?: number; // سلفة اليومية المرفقة بنفس اليوم
   advanceCategory?: AdvanceCategory;
   advanceNotes?: string;

@@ -12,6 +12,9 @@ import {
   Coins,
   ChevronLeft,
   Sparkles,
+  KeyRound,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 
 export const AuthPortal: React.FC = () => {
@@ -24,18 +27,16 @@ export const AuthPortal: React.FC = () => {
   const [adminPassword, setAdminPassword] = useState('');
   const [adminError, setAdminError] = useState('');
 
-  // Worker select & code
+  // Worker login credentials: username & password
   const activeWorkers = workers.filter((w) => w.status === 'active');
-  const [selectedWorkerId, setSelectedWorkerId] = useState<string>(
-    activeWorkers[0]?.id || ''
-  );
-  const [workerPin, setWorkerPin] = useState('');
+  const [workerUsername, setWorkerUsername] = useState('');
+  const [workerPassword, setWorkerPassword] = useState('');
+  const [showWorkerPassword, setShowWorkerPassword] = useState(false);
   const [workerError, setWorkerError] = useState('');
 
   const handleAdminSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setAdminError('');
-    // Accepts any standard pass or default '123456' / 'admin' or direct login
     if (!adminPassword.trim()) {
       setAdminError('يرجى إدخال كلمة المرور للمدير');
       return;
@@ -49,19 +50,26 @@ export const AuthPortal: React.FC = () => {
   const handleWorkerSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setWorkerError('');
-    if (!selectedWorkerId) {
-      setWorkerError('يرجى اختيار اسم العامل');
+    if (!workerUsername.trim()) {
+      setWorkerError('يرجى إدخال اسم المستخدم الخاص بك');
       return;
     }
-    const success = loginWorker(selectedWorkerId);
+    if (!workerPassword.trim()) {
+      setWorkerError('يرجى إدخال الباسورد (كلمة المرور)');
+      return;
+    }
+
+    const success = loginWorker(workerUsername.trim(), workerPassword.trim());
     if (!success) {
-      setWorkerError('تعذر تسجيل الدخول لحساب العامل');
+      setWorkerError('اسم المستخدم أو كلمة المرور غير صحيحة، يرجى مراجعة إدارة المخبز');
     }
   };
 
-  const selectedWorker = activeWorkers.find((w) => w.id === selectedWorkerId);
-  const workerRate =
-    selectedWorker?.customRatePer1000 ?? settings.defaultRatePer1000;
+  const handleSelectWorkerQuick = (w: typeof activeWorkers[0]) => {
+    setWorkerUsername(w.username || w.code);
+    setWorkerPassword(w.password || '123');
+    setWorkerError('');
+  };
 
   return (
     <div className="min-h-screen bg-stone-950 flex flex-col justify-center items-center px-4 py-10 selection:bg-amber-500 selection:text-white relative overflow-hidden">
@@ -272,69 +280,93 @@ export const AuthPortal: React.FC = () => {
               )}
 
               <form onSubmit={handleWorkerSubmit} className="space-y-4 pt-1">
-                {/* Worker Selector */}
+                {/* Username input */}
                 <div>
                   <label className="block text-xs font-semibold text-stone-300 mb-1.5">
-                    اختر اسمك من قائمة العمال: *
+                    اسم المستخدم: *
                   </label>
-                  <select
-                    value={selectedWorkerId}
-                    onChange={(e) => setSelectedWorkerId(e.target.value)}
-                    className="w-full p-3 bg-stone-800 border border-stone-700 rounded-xl text-white text-xs focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
-                  >
-                    {activeWorkers.map((w) => (
-                      <option key={w.id} value={w.id}>
-                        {w.name} ({w.roleTitle}) - كود: {w.code}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      autoFocus
+                      required
+                      dir="ltr"
+                      placeholder="أدخل اسم المستخدم (مثال: worker1)"
+                      value={workerUsername}
+                      onChange={(e) => {
+                        setWorkerError('');
+                        setWorkerUsername(e.target.value);
+                      }}
+                      className="w-full p-3 pl-10 bg-stone-800 border border-stone-700 rounded-xl text-white text-xs focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all font-mono"
+                    />
+                    <User className="w-4 h-4 text-stone-500 absolute left-3 top-3.5" />
+                  </div>
                 </div>
 
-                {/* Worker Info Card */}
-                {selectedWorker && (
-                  <div className="p-3.5 rounded-xl bg-stone-800/60 border border-stone-700/70 space-y-2 text-xs">
-                    <div className="flex justify-between items-center text-stone-300">
-                      <span>المهنة / التخصص:</span>
-                      <span className="font-bold text-amber-400">
-                        {selectedWorker.roleTitle}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center text-stone-300">
-                      <span>سعر الـ 1000 لقمة المعتمد لك:</span>
-                      <span className="font-bold font-mono text-emerald-400">
-                        {workerRate} {settings.currency}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center text-stone-400 text-[11px] pt-1 border-t border-stone-700/60">
-                      <span>الكود المهني:</span>
-                      <span className="font-mono text-stone-300">{selectedWorker.code}</span>
+                {/* Password input */}
+                <div>
+                  <label className="block text-xs font-semibold text-stone-300 mb-1.5">
+                    الباسورد (كلمة المرور): *
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showWorkerPassword ? 'text' : 'password'}
+                      required
+                      dir="ltr"
+                      placeholder="أدخل كلمة المرور (افتراضي: 123)"
+                      value={workerPassword}
+                      onChange={(e) => {
+                        setWorkerError('');
+                        setWorkerPassword(e.target.value);
+                      }}
+                      className="w-full p-3 pl-10 pr-3 bg-stone-800 border border-stone-700 rounded-xl text-white text-xs focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowWorkerPassword(!showWorkerPassword)}
+                      className="absolute left-3 top-3.5 text-stone-400 hover:text-white"
+                      tabIndex={-1}
+                    >
+                      {showWorkerPassword ? (
+                        <EyeOff className="w-4 h-4" />
+                      ) : (
+                        <Eye className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Quick select pills */}
+                {activeWorkers.length > 0 && (
+                  <div className="pt-2 border-t border-stone-800/80">
+                    <span className="text-[11px] text-stone-400 block mb-2 font-medium">
+                      أو اختر اسمك للتعبئة التلقائية السريعة:
+                    </span>
+                    <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto pr-0.5">
+                      {activeWorkers.map((w) => (
+                        <button
+                          key={w.id}
+                          type="button"
+                          onClick={() => handleSelectWorkerQuick(w)}
+                          className={`text-[11px] px-2.5 py-1 rounded-lg border transition-all ${
+                            workerUsername === w.username || workerUsername === w.code
+                              ? 'bg-amber-500/20 border-amber-500/80 text-amber-300 font-bold'
+                              : 'bg-stone-800/80 hover:bg-stone-800 border-stone-700/80 text-stone-300'
+                          }`}
+                        >
+                          {w.name}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 )}
-
-                {/* Optional PIN / Quick login */}
-                <div>
-                  <label className="block text-xs font-semibold text-stone-300 mb-1.5">
-                    الرمز السري أو كود الدخول (اختياري):
-                  </label>
-                  <input
-                    type="password"
-                    placeholder="اضغط دخول مباشرة أو أدخل الرمز"
-                    value={workerPin}
-                    onChange={(e) => setWorkerPin(e.target.value)}
-                    className="w-full p-3 bg-stone-800 border border-stone-700 rounded-xl text-white text-xs focus:ring-2 focus:ring-amber-500 focus:border-amber-500 font-mono"
-                  />
-                  <p className="text-[10px] text-stone-500 mt-1">
-                    * يمكنك الدخول مباشرة بدون رمز للتسجيل السريع في وردية العمل.
-                  </p>
-                </div>
 
                 <div className="pt-2">
                   <button
                     type="submit"
                     className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-stone-950 font-black text-xs shadow-lg shadow-amber-900/40 transition-all flex items-center justify-center gap-2 active:scale-98"
                   >
-                    <User className="w-4 h-4" />
+                    <KeyRound className="w-4 h-4" />
                     <span>تسجيل الدخول إلى حساب العامل</span>
                   </button>
                 </div>

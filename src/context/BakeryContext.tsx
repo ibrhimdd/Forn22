@@ -37,7 +37,7 @@ interface BakeryContextType {
     workerId?: string;
   } | null;
   loginAdmin: (password?: string) => boolean;
-  loginWorker: (workerId: string) => boolean;
+  loginWorker: (identifier: string, password?: string) => boolean;
   logout: () => void;
 
   currentRole: UserRole;
@@ -67,7 +67,13 @@ interface BakeryContextType {
       advanceNotes?: string;
     }
   ) => void;
-  approveProductionLog: (id: string, adjustedPieces?: number, adjustedRate?: number) => void;
+  approveProductionLog: (
+    id: string,
+    adjustedPieces?: number,
+    adjustedRate?: number,
+    adjustedAdvance?: number,
+    adminNotes?: string
+  ) => void;
   rejectProductionLog: (id: string, reason: string) => void;
   deleteProductionLog: (id: string) => void;
   addAdvance: (
@@ -132,7 +138,28 @@ export const BakeryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const [workers, setWorkers] = useState<WorkerProfile[]>(() => {
     const saved = localStorage.getItem('syrian_bakery_workers');
-    return saved ? JSON.parse(saved) : initialWorkers;
+    if (saved) {
+      try {
+        const parsed: WorkerProfile[] = JSON.parse(saved);
+        // Ensure all workers have username & password for the login system
+        return parsed.map((w, index) => {
+          const matchingInitial = initialWorkers.find((iw) => iw.id === w.id);
+          const defaultUser =
+            w.username ||
+            matchingInitial?.username ||
+            `worker${w.code ? w.code.replace(/\D/g, '') : index + 1}`;
+          const defaultPass = w.password || matchingInitial?.password || '123';
+          return {
+            ...w,
+            username: defaultUser,
+            password: defaultPass,
+          };
+        });
+      } catch (e) {
+        return initialWorkers;
+      }
+    }
+    return initialWorkers;
   });
 
   const [productionLogs, setProductionLogs] = useState<ProductionLog[]>(() => {
@@ -197,9 +224,25 @@ export const BakeryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return true;
   };
 
-  const loginWorker = (workerId: string): boolean => {
-    const worker = workers.find((w) => w.id === workerId);
+  const loginWorker = (identifier: string, password?: string): boolean => {
+    const trimmed = identifier.trim().toLowerCase();
+    const worker = workers.find(
+      (w) =>
+        w.id === identifier ||
+        (w.username && w.username.trim().toLowerCase() === trimmed) ||
+        w.code.trim().toLowerCase() === trimmed ||
+        w.name.trim().toLowerCase() === trimmed
+    );
     if (!worker) return false;
+    if (worker.status === 'archived') return false;
+
+    // If a password was provided, verify it
+    if (password !== undefined && password !== null && password !== '') {
+      if (worker.password && worker.password.trim() !== password.trim()) {
+        return false;
+      }
+    }
+
     const workerUser = {
       role: 'worker' as UserRole,
       name: worker.name,
@@ -293,6 +336,8 @@ export const BakeryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const ratePer1000 = worker?.customRatePer1000 ?? settings.defaultRatePer1000;
     const grossAmount = (data.piecesCount / 1000) * ratePer1000;
 
+    const advanceId = data.advanceAmount && data.advanceAmount > 0 ? `adv-${Date.now()}-prod` : undefined;
+
     const newLog: ProductionLog = {
       id: `prod-${Date.now()}`,
       workerId: data.workerId,
@@ -303,7 +348,8 @@ export const BakeryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       ratePer1000,
       grossAmount,
       notes: data.notes || '',
-      advanceAmount: data.advanceAmount && data.advanceAmount > 0 ? Number(data.advanceAmount) : undefined,
+      advanceId,
+      advanceAmount: data.advanceAmount && data.advanceAmount > 0 ? Number(data.advanceAmount) : 0,
       advanceCategory: data.advanceCategory || 'cash',
       advanceNotes: data.advanceNotes || '',
       status: 'pending',
@@ -313,9 +359,9 @@ export const BakeryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setProductionLogs((prev) => [newLog, ...prev]);
 
     // If an advance was requested with this production log, automatically create the advance record for the same day
-    if (data.advanceAmount && data.advanceAmount > 0) {
+    if (advanceId && data.advanceAmount && data.advanceAmount > 0) {
       const newAdvance: AdvanceRecord = {
-        id: `adv-${Date.now()}-prod`,
+        id: advanceId,
         workerId: data.workerId,
         workerName,
         date: data.date,
@@ -331,22 +377,40 @@ export const BakeryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const approveProductionLog = (
     id: string,
     adjustedPieces?: number,
-    adjustedRate?: number
+    adjustedRate?: number,
+    adjustedAdvance?: number,
+    adminNotes?: string
   ) => {
     const now = new Date().toISOString();
+    let targetWorkerId = '';
+    let targetWorkerName = '';
+    let targetDate = '';
+    let targetAdvanceId: string | undefined = undefined;
+    let oldAdvanceAmount: number | undefined = undefined;
+
     setProductionLogs((prev) =>
       prev.map((log) => {
         if (log.id !== id) return log;
 
+        targetWorkerId = log.workerId;
+        targetWorkerName = log.workerName;
+        targetDate = log.date;
+        targetAdvanceId = log.advanceId;
+        oldAdvanceAmount = log.advanceAmount;
+
         const pieces = adjustedPieces !== undefined ? adjustedPieces : log.piecesCount;
         const rate = adjustedRate !== undefined ? adjustedRate : log.ratePer1000;
         const gross = (pieces / 1000) * rate;
+        const adv = adjustedAdvance !== undefined ? adjustedAdvance : (log.advanceAmount ?? 0);
+        const finalNotes = adminNotes !== undefined ? adminNotes : log.notes;
 
         return {
           ...log,
           piecesCount: pieces,
           ratePer1000: rate,
           grossAmount: gross,
+          advanceAmount: adv > 0 ? adv : 0,
+          notes: finalNotes,
           status: 'approved',
           rejectionReason: undefined,
           reviewedAt: now,
@@ -354,6 +418,80 @@ export const BakeryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         };
       })
     );
+
+    // Synchronize attached advance in advances list if adjustedAdvance is provided
+    if (adjustedAdvance !== undefined) {
+      const newAdvAmount = Number(adjustedAdvance);
+      setAdvances((prev) => {
+        // 1. If targetAdvanceId was explicitly set
+        if (targetAdvanceId) {
+          if (newAdvAmount > 0) {
+            const exists = prev.some((a) => a.id === targetAdvanceId);
+            if (exists) {
+              return prev.map((a) =>
+                a.id === targetAdvanceId
+                  ? { ...a, amount: newAdvAmount, notes: `سلفة مرفقة مع يومية ${targetDate} (معدلة عند الاعتماد)` }
+                  : a
+              );
+            } else {
+              return [
+                {
+                  id: targetAdvanceId,
+                  workerId: targetWorkerId,
+                  workerName: targetWorkerName,
+                  date: targetDate,
+                  amount: newAdvAmount,
+                  category: 'cash',
+                  notes: `سلفة مرفقة مع يومية ${targetDate} (تم إقرارها عند الاعتماد)`,
+                  createdAt: now,
+                },
+                ...prev,
+              ];
+            }
+          } else {
+            // Remove the advance since advance was set to 0
+            return prev.filter((a) => a.id !== targetAdvanceId);
+          }
+        }
+
+        // 2. If targetAdvanceId was not set, search by workerId, date and notes
+        const matchingIndex = prev.findIndex(
+          (a) =>
+            a.workerId === targetWorkerId &&
+            a.date === targetDate &&
+            (a.notes.includes('سلفة مرفقة') || a.notes.includes('يومية') || (oldAdvanceAmount && a.amount === oldAdvanceAmount))
+        );
+
+        if (matchingIndex !== -1) {
+          if (newAdvAmount > 0) {
+            return prev.map((a, idx) =>
+              idx === matchingIndex
+                ? { ...a, amount: newAdvAmount, notes: `سلفة مرفقة مع يومية ${targetDate} (معدلة عند الاعتماد)` }
+                : a
+            );
+          } else {
+            return prev.filter((_, idx) => idx !== matchingIndex);
+          }
+        } else if (newAdvAmount > 0) {
+          // If no advance previously existed and admin sets an advance amount > 0 upon approval
+          return [
+            {
+              id: `adv-${Date.now()}-approved`,
+              workerId: targetWorkerId,
+              workerName: targetWorkerName,
+              date: targetDate,
+              amount: newAdvAmount,
+              category: 'cash',
+              notes: `سلفة مرفقة مع يومية ${targetDate} (تم إقرارها عند الاعتماد)`,
+              createdAt: now,
+            },
+            ...prev,
+          ];
+        }
+
+        return prev;
+      });
+    }
   };
 
   const rejectProductionLog = (id: string, reason: string) => {
@@ -373,6 +511,10 @@ export const BakeryProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const deleteProductionLog = (id: string) => {
+    const target = productionLogs.find((log) => log.id === id);
+    if (target?.advanceId) {
+      setAdvances((prev) => prev.filter((a) => a.id !== target.advanceId));
+    }
     setProductionLogs((prev) => prev.filter((log) => log.id !== id));
   };
 
